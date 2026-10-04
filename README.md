@@ -1,5 +1,7 @@
 # World.in
 
-Demo welcome-bonus page. Simulated balance only. No real X login, no wallet signature, no Solana transfer.
+VeyroHood demo welcome-bonus page. Simulated balance only.
 
-Enable GitHub Pages on `main` / root to publish.
+Missions: follow https://x.com/VeyroHood, join https://discord.gg/WFqnfxBV3, then like / repost / reply on the pinned post (link placeholder until provided).
+
+Bonus range: $50–$1,000, shown in the site wallet after missions. ETH-chain withdraw stays pending until KYC, which is marked coming soon. No real transfer.
