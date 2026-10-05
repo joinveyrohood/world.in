@@ -96,7 +96,7 @@
         <div class="kicker">Member</div>
         <div id="code" style="font-size:22px;font-weight:700;letter-spacing:.08em;margin:8px 0">——</div>
         <div class="stats">
-          <div class="stat"><b id="mem">#—</b><span>Member</span></div>
+          <div class="stat"><b id="mem">0</b><span>Members</span></div>
           <div class="stat"><b id="refs">0</b><span>Referrals</span></div>
         </div>
         <p class="d">Each referral adds 8% to the shown bonus, capped at $1,000.</p>
@@ -123,8 +123,27 @@ const missions = [
   { id:"repost", title:"Repost the pinned post", desc:"Pinned link coming. Opens the profile for now.", href:PIN },
   { id:"reply", title:"Reply on the pinned post", desc:"Pinned link coming. Opens the profile for now.", href:PIN }
 ];
-const S = { on:false, handle:"", done:{}, base:null, refs:0, code:"", mem:0 };
+const SB = "https://zrrhxvrswvqlsbjjgool.supabase.co";
+const SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inpycmh4dnJzd3ZxbHNiampnb29sIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk0NDIxNDgsImV4cCI6MjEwNTAxODE0OH0.kTttSr6ACdLmiL9CzyF1chHkc_BGBOzlsERffdzzUuQ";
+async function memberCount(){
+  const res = await fetch(SB+"/rest/v1/world_members?select=handle", {
+    headers:{ apikey:SB_KEY, Authorization:"Bearer "+SB_KEY, Prefer:"count=exact", Range:"0-0" }
+  });
+  const range = res.headers.get("content-range") || "";
+  const total = Number((range.split("/")[1]) || 0);
+  $("mem").textContent = Number.isFinite(total) ? total.toLocaleString() : "0";
+  return total;
+}
+async function joinMember(handle){
+  await fetch(SB+"/rest/v1/world_members", {
+    method:"POST",
+    headers:{ apikey:SB_KEY, Authorization:"Bearer "+SB_KEY, "Content-Type":"application/json", Prefer:"resolution=ignore-duplicates" },
+    body: JSON.stringify({ handle: handle.toLowerCase() })
+  });
+  return memberCount();
+}
 const $ = id => document.getElementById(id);
+const S = { on:false, handle:"", done:{}, base:null, refs:0, code:"", mem:0 };
 function toast(t){ const el=$("toast"); el.textContent=t; el.classList.add("show"); clearTimeout(toast._t); toast._t=setTimeout(()=>el.classList.remove("show"), 2600); }
 function code(){ const a="ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; let s=""; for(let i=0;i<6;i++) s+=a[Math.floor(Math.random()*a.length)]; return s; }
 function roll(){ const r=Math.random(); if(r<.6) return 50+Math.floor(Math.random()*101); if(r<.88) return 150+Math.floor(Math.random()*351); return 500+Math.floor(Math.random()*501); }
@@ -135,7 +154,7 @@ function render(){
     const done=!!S.done[m.id];
     const row=document.createElement("div");
     row.className="mission"+(done?" done":"");
-    row.innerHTML=`<div class="left"><div class="check">${done?"\u2713":""}</div><div><div class="t">${m.title}</div><div class="d">${m.desc}</div></div></div><button class="mini">${done?"Done":"Open"}</button>`;
+    row.innerHTML=`<div class="left"><div class="check">${done?"✓":""}</div><div><div class="t">${m.title}</div><div class="d">${m.desc}</div></div></div><button class="mini">${done?"Done":"Open"}</button>`;
     row.querySelector("button").onclick=()=>complete(m);
     list.appendChild(row);
   });
@@ -155,22 +174,22 @@ function complete(m){
   S.done[m.id]=true;
   render();
   if(missions.every(x=>S.done[x.id])){
-    $("status").textContent="Wallet credited $"+total()+" \u00b7 simulated";
+    $("status").textContent="Wallet credited $"+total()+" · simulated";
     toast("Bonus deposited: $"+total());
   }
 }
-$("connect").onclick=()=>{
+$("connect").onclick=async()=>{
   const h=$("handle").value.trim().replace(/^@/,"");
   if(!h) return toast("Add a handle.");
-  S.on=true; S.handle=h; S.base=roll(); S.code=code(); S.mem=1000+Math.floor(Math.random()*9000);
+  S.on=true; S.handle=h; S.base=roll(); S.code=code();
   const ref=new URLSearchParams(location.search).get("ref");
   if(ref && ref!==S.code) S.refs=1;
   $("who").textContent="@"+h;
   $("code").textContent=S.code;
-  $("mem").textContent="#"+S.mem.toLocaleString();
   $("signin").style.display="none";
   $("status").textContent="Bonus rolled: $"+S.base+". Finish missions to deposit it.";
   render();
+  try { await joinMember(h); } catch(e) { toast("Member count did not save."); }
 };
 $("copy").onclick=()=>{
   if(!S.on) return toast("Connect first.");
@@ -183,24 +202,26 @@ $("withdraw").onclick=()=>{
   if(!/^0x[a-fA-F0-9]{40}$/.test(addr)) return toast("Add a valid 0x ETH address. It is not used on-chain.");
   $("kyc").textContent="KYC coming soon. ETH withdraw saved as pending. No transfer.";
   toast("Pending. KYC is not open yet.");
-  $("withdraw").textContent="Pending \u00b7 KYC soon";
+  $("withdraw").textContent="Pending · KYC soon";
   $("withdraw").disabled=true;
 };
 $("go").onclick=()=>$("missions").scrollIntoView({behavior:"smooth"});
 $("reset").onclick=()=>{
   Object.assign(S,{on:false,handle:"",done:{},base:null,refs:0,code:"",mem:0});
   $("who").textContent="Not connected";
-  $("code").textContent="\u2014\u2014";
-  $("mem").textContent="#\u2014";
-  $("status").textContent="Connect X to roll $50\u2013$1,000.";
+  $("code").textContent="——";
+  $("mem").textContent="0";
+  $("status").textContent="Connect X to roll $50–$1,000.";
   $("signin").style.display="block";
   $("handle").value="";
   $("eth").value="";
   $("kyc").textContent="KYC status: coming soon";
   $("withdraw").textContent="Withdraw after KYC";
   render();
+  memberCount().catch(()=>{});
 };
 render();
+memberCount().catch(()=>{});
 </script>
 </body>
 </html>
