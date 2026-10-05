@@ -135,12 +135,39 @@ async function memberCount(){
   return total;
 }
 async function joinMember(handle){
-  await fetch(SB+"/rest/v1/world_members", {
+  const res = await fetch(SB+"/rest/v1/world_members", {
     method:"POST",
-    headers:{ apikey:SB_KEY, Authorization:"Bearer "+SB_KEY, "Content-Type":"application/json", Prefer:"resolution=ignore-duplicates" },
+    headers:{ apikey:SB_KEY, Authorization:"Bearer "+SB_KEY, "Content-Type":"application/json", Prefer:"return=minimal" },
     body: JSON.stringify({ handle: handle.toLowerCase() })
   });
-  return memberCount();
+  if(res.status === 409) return false;
+  if(!res.ok) throw new Error("join failed");
+  await memberCount();
+  return true;
+}
+async function handleTaken(handle){
+  const res = await fetch(SB+"/rest/v1/world_members?handle=eq."+encodeURIComponent(handle.toLowerCase())+"&select=handle", {
+    headers:{ apikey:SB_KEY, Authorization:"Bearer "+SB_KEY }
+  });
+  const rows = await res.json();
+  return Array.isArray(rows) && rows.length > 0;
+}
+async function addressTaken(address){
+  const res = await fetch(SB+"/rest/v1/world_wallets?address=eq."+encodeURIComponent(address.toLowerCase())+"&select=address", {
+    headers:{ apikey:SB_KEY, Authorization:"Bearer "+SB_KEY }
+  });
+  const rows = await res.json();
+  return Array.isArray(rows) && rows.length > 0;
+}
+async function saveAddress(address, handle){
+  const res = await fetch(SB+"/rest/v1/world_wallets", {
+    method:"POST",
+    headers:{ apikey:SB_KEY, Authorization:"Bearer "+SB_KEY, "Content-Type":"application/json", Prefer:"return=minimal" },
+    body: JSON.stringify({ address: address.toLowerCase(), handle: handle.toLowerCase() })
+  });
+  if(res.status === 409) return false;
+  if(!res.ok) throw new Error("save failed");
+  return true;
 }
 const $ = id => document.getElementById(id);
 const S = { on:false, handle:"", done:{}, base:null, refs:0, code:"", mem:0 };
@@ -180,7 +207,25 @@ function complete(m){
 }
 $("connect").onclick=async()=>{
   const h=$("handle").value.trim().replace(/^@/,"");
-  if(!h) return toast("Add a handle.");
+  if(!/^[A-Za-z0-9_]{1,20}$/.test(h)) return toast("Use a real handle, letters and numbers only.");
+  $("connect").disabled=true;
+  try {
+    if(await handleTaken(h)){
+      toast("This X account already connected. It cannot join again.");
+      $("connect").disabled=false;
+      return;
+    }
+    const joined = await joinMember(h);
+    if(!joined){
+      toast("This X account already connected. It cannot join again.");
+      $("connect").disabled=false;
+      return;
+    }
+  } catch(e) {
+    toast("Could not check this account. Try again.");
+    $("connect").disabled=false;
+    return;
+  }
   S.on=true; S.handle=h; S.base=roll(); S.code=code();
   const ref=new URLSearchParams(location.search).get("ref");
   if(ref && ref!==S.code) S.refs=1;
@@ -189,7 +234,6 @@ $("connect").onclick=async()=>{
   $("signin").style.display="none";
   $("status").textContent="Bonus rolled: $"+S.base+". Finish missions to deposit it.";
   render();
-  try { await joinMember(h); } catch(e) { toast("Member count did not save."); }
 };
 $("copy").onclick=()=>{
   if(!S.on) return toast("Connect first.");
@@ -197,13 +241,32 @@ $("copy").onclick=()=>{
   navigator.clipboard?.writeText(link);
   toast("Invite link copied.");
 };
-$("withdraw").onclick=()=>{
+$("withdraw").onclick=async()=>{
   const addr=$("eth").value.trim();
   if(!/^0x[a-fA-F0-9]{40}$/.test(addr)) return toast("Add a valid 0x ETH address. It is not used on-chain.");
-  $("kyc").textContent="KYC coming soon. ETH withdraw saved as pending. No transfer.";
-  toast("Pending. KYC is not open yet.");
-  $("withdraw").textContent="Pending · KYC soon";
+  if(!S.handle) return toast("Connect X first.");
   $("withdraw").disabled=true;
+  try {
+    if(await addressTaken(addr)){
+      $("kyc").textContent="This address was already submitted.";
+      toast("This address cannot be submitted again.");
+      $("withdraw").disabled=false;
+      return;
+    }
+    const ok = await saveAddress(addr, S.handle);
+    if(!ok){
+      toast("This address cannot be submitted again.");
+      $("withdraw").disabled=false;
+      return;
+    }
+  } catch(e) {
+    toast("Could not save this address.");
+    $("withdraw").disabled=false;
+    return;
+  }
+  $("kyc").textContent="KYC coming soon. Address locked to this account. No transfer.";
+  toast("Address saved once. KYC is not open yet.");
+  $("withdraw").textContent="Address locked";
 };
 $("go").onclick=()=>$("missions").scrollIntoView({behavior:"smooth"});
 $("reset").onclick=()=>{
